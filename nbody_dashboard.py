@@ -48,7 +48,7 @@ model.apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'wei
 model.train()
 
 # Load normalized data
-positions = np.load('data/simulations/positions_over_time.npy')
+positions = np.load('data/simulations/positions_over_time.npy', allow_pickle=True)
 positions = (positions - positions.mean()) / positions.std()
 velocities = np.load('data/simulations/velocities_over_time.npy')
 velocities = (velocities - velocities.mean()) / velocities.std()
