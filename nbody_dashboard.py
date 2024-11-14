@@ -4,7 +4,6 @@ Created on Thu Nov 14 10:25:04 2024
 
 @author: Manny Admin
 """
-
 import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,7 +13,19 @@ from model import NBodyGNN  # Assuming your model is in `model.py`
 
 # Set up logging
 import logging
+import requests
 logging.basicConfig(level=logging.DEBUG)
+
+# Function to download files from GitHub
+def download_file(url, save_path):
+    response = requests.get(url)
+    if response.status_code == 200:
+        with open(save_path, 'wb') as f:
+            f.write(response.content)
+        logging.info(f"File downloaded from {url} to {save_path}")
+    else:
+        st.error(f"Error downloading file from {url}. Status code: {response.status_code}")
+        logging.error(f"Error downloading file from {url}. Status code: {response.status_code}")
 
 # Page configuration
 st.set_page_config(page_title="N-Body Simulation Dashboard", layout="wide")
@@ -31,7 +42,7 @@ model = NBodyGNN()
 model.eval()
 
 # Load normalized data
-# First option: Uploading data manually
+# Option 1: Uploading data manually
 uploaded_positions = st.file_uploader("Upload positions .npy file", type="npy")
 uploaded_velocities = st.file_uploader("Upload velocities .npy file", type="npy")
 
@@ -48,21 +59,26 @@ if uploaded_positions is not None and uploaded_velocities is not None:
         st.error(f"An error occurred while loading the .npy files: {e}")
         logging.error(f"Error loading .npy files: {e}")
 else:
-    # Second option: Default file paths (useful for local deployment and testing)
-    st.markdown("Alternatively, attempting to load default data from known file paths.")
+    # Option 2: Download files from GitHub if not uploaded
+    st.markdown("Alternatively, attempting to download default data from GitHub.")
     try:
-        positions = np.load('data/simulations/positions_over_time.npy')
-        velocities = np.load('data/simulations/velocities_over_time.npy')
+        positions_url = "https://raw.githubusercontent.com/manny-umassd/nbody-undergrad-project/main/data/simulations/positions_over_time.npy"
+        velocities_url = "https://raw.githubusercontent.com/manny-umassd/nbody-undergrad-project/main/data/simulations/velocities_over_time.npy"
+        
+        download_file(positions_url, 'positions_over_time.npy')
+        download_file(velocities_url, 'velocities_over_time.npy')
+        
+        # Load the downloaded files
+        positions = np.load('positions_over_time.npy')
+        velocities = np.load('velocities_over_time.npy')
+        
         # Normalize data
         positions = (positions - positions.mean()) / positions.std()
         velocities = (velocities - velocities.mean()) / velocities.std()
-        logging.info("Default files loaded successfully.")
-    except FileNotFoundError:
-        st.error("Default .npy files not found. Please upload data manually or check file paths.")
-        logging.error("Default .npy files not found.")
+        logging.info("Downloaded files loaded successfully.")
     except Exception as e:
-        st.error(f"An unexpected error occurred: {e}")
-        logging.error(f"Error loading default .npy files: {e}")
+        st.error(f"An unexpected error occurred while downloading/loading files: {e}")
+        logging.error(f"Error downloading/loading .npy files from GitHub: {e}")
 
 # Dummy data for demonstration if no files are uploaded
 if 'positions' not in locals():
