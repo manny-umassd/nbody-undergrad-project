@@ -12,7 +12,7 @@ def download_and_load_npy(url):
     response = requests.get(url)
     response.raise_for_status()
     try:
-        return np.load(io.BytesIO(response.content))
+        return np.load(io.BytesIO(response.content), allow_pickle=True)
     except UnicodeDecodeError as e:
         print("Error decoding file. Checking problematic byte...")
         with io.BytesIO(response.content) as file:
