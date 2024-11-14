@@ -1,203 +1,122 @@
-import torch
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, GraphConv, GATConv
-from torch_geometric.data import Data, Batch
-import numpy as np
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Nov 14 10:25:04 2024
+
+@author: Manny Admin
+"""
+
+import streamlit as st
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from torch_geometric.data import Data
+from model import NBodyGNN  # Assuming your model is in `model.py`
 
-# Define GNN model with additional layers, attention mechanism, and dropout for regularization
-class NBodyGNN(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, n_bodies):
-        super(NBodyGNN, self).__init__()
-        self.conv1 = GraphConv(input_dim, hidden_dim)
-        self.conv2 = GraphConv(hidden_dim, hidden_dim)
-        self.conv3 = GATConv(hidden_dim, hidden_dim, heads=2, concat=False)  # Attention mechanism
-        self.fc = torch.nn.Linear(hidden_dim * n_bodies, output_dim)
-        self.dropout = torch.nn.Dropout(p=0.3)  # Dropout for regularization
-        self.residual = torch.nn.Linear(input_dim, hidden_dim)  # Residual connection for input
-        
-        # Weight initialization
-        torch.nn.init.xavier_uniform_(self.fc.weight)
+# Set up logging
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-        x_res = self.residual(x)  # Residual connection
-        x = self.conv1(x, edge_index)
-        x = F.relu(x + x_res)  # Add residual and apply activation
-        x = self.dropout(x)  # Apply dropout
-        x = self.conv2(x, edge_index)
-        x = F.relu(x)
-        x = self.dropout(x)  # Apply dropout
-        x = self.conv3(x, edge_index)
-        x = F.relu(x)
-        x = x.view(1, -1)  # Flatten all node features per graph (assuming a single graph for prediction)
-        out = self.fc(x)
-        return out
+# Page configuration
+st.set_page_config(page_title="N-Body Simulation Dashboard", layout="wide")
 
-# Load the trained GNN model
-n_bodies = 3  # Define the number of bodies here
-input_dim = 7  # [position (3), velocity (3), mass (1)]
-hidden_dim = 128  # Increased hidden dimension for better learning capacity
-output_dim = n_bodies * 6  # [next position (3) + next velocity (3) for each body]
+# Title and introduction
+st.title("N-Body Simulation Dashboard")
+st.markdown("""
+    Welcome to the N-Body Simulation Dashboard! This dashboard allows you to visualize 
+    the predicted and actual positions of celestial bodies based on our Graph Neural Network (GNN) model.
+""")
 
-model = NBodyGNN(input_dim, hidden_dim, output_dim, n_bodies)
-
-# Initialize model weights
-model.apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None)
-
-model.train()
+# Load the trained model
+model = NBodyGNN()
+model.eval()
 
 # Load normalized data
-positions = np.load('data/simulations/positions_over_time.npy', allow_pickle=True)
-positions = (positions - positions.mean()) / positions.std()
-velocities = np.load('data/simulations/velocities_over_time.npy')
-velocities = (velocities - velocities.mean()) / velocities.std()
-masses = np.load('data/simulations/masses.npy')
-masses = (masses - masses.mean()) / masses.std()
+# First option: Uploading data manually
+uploaded_positions = st.file_uploader("Upload positions .npy file", type="npy")
+uploaded_velocities = st.file_uploader("Upload velocities .npy file", type="npy")
 
-# Prepare the data for training
-node_features = []
-for i in range(n_bodies):
-    features = np.concatenate((positions[-1, i], velocities[-1, i], [masses[i]]))
-    node_features.append(features)
-x = torch.tensor(np.array(node_features), dtype=torch.float32)  # Convert to numpy array first and use float32
+if uploaded_positions is not None and uploaded_velocities is not None:
+    try:
+        # Load the uploaded files
+        positions = np.load(uploaded_positions)
+        velocities = np.load(uploaded_velocities)
+        # Normalize data
+        positions = (positions - positions.mean()) / positions.std()
+        velocities = (velocities - velocities.mean()) / velocities.std()
+        logging.info("Files uploaded and loaded successfully.")
+    except Exception as e:
+        st.error(f"An error occurred while loading the .npy files: {e}")
+        logging.error(f"Error loading .npy files: {e}")
+else:
+    # Second option: Default file paths (useful for local deployment and testing)
+    st.markdown("Alternatively, attempting to load default data from known file paths.")
+    try:
+        positions = np.load('data/simulations/positions_over_time.npy')
+        velocities = np.load('data/simulations/velocities_over_time.npy')
+        # Normalize data
+        positions = (positions - positions.mean()) / positions.std()
+        velocities = (velocities - velocities.mean()) / velocities.std()
+        logging.info("Default files loaded successfully.")
+    except FileNotFoundError:
+        st.error("Default .npy files not found. Please upload data manually or check file paths.")
+        logging.error("Default .npy files not found.")
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {e}")
+        logging.error(f"Error loading default .npy files: {e}")
 
-# Fully connected graph edges
-edge_index = torch.tensor(
-    [[i, j] for i in range(n_bodies) for j in range(n_bodies) if i != j],
-    dtype=torch.long
-).t().contiguous()
+# Dummy data for demonstration if no files are uploaded
+if 'positions' not in locals():
+    st.warning("Using dummy data for demonstration. Please upload .npy files for actual results.")
+    positions = np.random.rand(100, 3)
+    velocities = np.random.rand(100, 3)
 
-# Create Data object for training
-training_data = Data(x=x, edge_index=edge_index)
+# Define the number of bodies and input dimension
+n_bodies = 3  # Number of celestial bodies
+input_dim = 7  # [position (3), velocity (3), mass (1)]
 
-# Define optimizer and learning rate scheduler
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-4)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)  # Reduce LR by half every 20 epochs
+# Create Data object for prediction (dummy for demo purposes)
+data = Data(
+    x=torch.tensor(positions, dtype=torch.float),
+    edge_index=torch.tensor([[0, 1], [1, 0]], dtype=torch.long),
+    edge_attr=torch.tensor(velocities, dtype=torch.float)
+)
 
-# Training loop
-n_epochs = 50
-losses = []
-validation_losses = []
-for epoch in range(n_epochs):
-    model.train()
-    optimizer.zero_grad()
-    predicted = model(training_data)
-    predicted = predicted.view(n_bodies, 6)
-    actual = torch.cat((torch.tensor(positions[-1], dtype=torch.float32), torch.tensor(velocities[-1], dtype=torch.float32)), dim=1)
-    
-    loss = F.mse_loss(predicted, actual)
-    loss.backward()
-    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # Gradient clipping
-    optimizer.step()
-    scheduler.step()
-
-    losses.append(loss.item())
-    print(f"Epoch {epoch+1}/{n_epochs}, Loss: {loss.item():.4f}")
-
-    # Validation (using a different time step)
-    model.eval()
+# Make predictions with the model
+try:
     with torch.no_grad():
-        val_positions = positions[-2]  # Use the second-to-last time step for validation
-        val_velocities = velocities[-2]
-        val_node_features = []
-        for i in range(n_bodies):
-            val_features = np.concatenate((val_positions[i], val_velocities[i], [masses[i]]))
-            val_node_features.append(val_features)
-        val_x = torch.tensor(np.array(val_node_features), dtype=torch.float32)
-        val_data = Data(x=val_x, edge_index=edge_index)
-        val_predicted = model(val_data).view(n_bodies, 6)
-        val_actual = torch.cat((torch.tensor(val_positions, dtype=torch.float32), torch.tensor(val_velocities, dtype=torch.float32)), dim=1)
-        val_loss = F.mse_loss(val_predicted, val_actual)
-        validation_losses.append(val_loss.item())
-        print(f"Epoch {epoch+1}/{n_epochs}, Validation Loss: {val_loss.item():.4f}")
+        predictions = model(data.x, data.edge_index, data.edge_attr)
+        next_positions = predictions[:, :3].detach().numpy()
 
-# Plot training and validation loss over epochs
-plt.figure()
-plt.plot(range(1, n_epochs + 1), losses, label='Training Loss')
-plt.plot(range(1, n_epochs + 1), validation_losses, linestyle='--', label='Validation Loss')
-plt.xlabel('Epochs')
-plt.ylabel('Loss (MSE)')
-plt.title('Training and Validation Loss Over Epochs')
-plt.grid()
-plt.legend()
-plt.show()
+        # Plotting the predicted vs. actual positions
+        fig, ax = plt.subplots()
+        ax.scatter(positions[:, 0], positions[:, 1], c='blue', label='Actual Positions', alpha=0.6)
+        ax.scatter(next_positions[:, 0], next_positions[:, 1], c='red', label='Predicted Positions', alpha=0.6)
+        ax.set_xlabel("X Position (m)")
+        ax.set_ylabel("Y Position (m)")
+        ax.legend()
+        ax.set_title("Actual vs. Predicted Positions of Bodies")
 
-# Evaluation: Predict future positions and velocities
-model.eval()
-with torch.no_grad():
-    test_positions = positions[-1]  # Use the last time step for testing
-    test_velocities = velocities[-1]
-    test_node_features = []
+        # Display plot
+        st.pyplot(fig)
+
+except Exception as e:
+    st.error(f"An error occurred while predicting with the model: {e}")
+    logging.error(f"Prediction error: {e}")
+
+# Future Trajectories Visualization (optional)
+try:
+    fig2, ax2 = plt.subplots()
     for i in range(n_bodies):
-        test_features = np.concatenate((test_positions[i], test_velocities[i], [masses[i]]))
-        test_node_features.append(test_features)
-    test_x = torch.tensor(np.array(test_node_features), dtype=torch.float32)
-    test_data = Data(x=test_x, edge_index=edge_index)
-    test_predicted = model(test_data).view(n_bodies, 6)
+        ax2.plot(next_positions[:, 0], next_positions[:, 1], label=f"Predicted Trajectory Body {i+1}")
+    ax2.set_xlabel("X Position (m)")
+    ax2.set_ylabel("Y Position (m)")
+    ax2.legend()
+    ax2.set_title("Predicted Future Trajectories of Bodies")
 
-    # Actual values
-    actual_positions = test_positions
-    actual_velocities = test_velocities
+    # Display plot
+    st.pyplot(fig2)
 
-    # Predicted values
-    predicted_positions = test_predicted[:, :3].detach().numpy()
-    predicted_velocities = test_predicted[:, 3:].detach().numpy()
+except Exception as e:
+    st.error(f"An error occurred while visualizing future trajectories: {e}")
+    logging.error(f"Trajectory visualization error: {e}")
 
-    # Plot actual vs. predicted positions for body 1
-    plt.figure()
-    for i in range(n_bodies):
-        plt.scatter(actual_positions[i][0], actual_positions[i][1], color='blue', label=f'Actual Body {i+1}')
-        plt.scatter(predicted_positions[i][0], predicted_positions[i][1], color='red', marker='x', label=f'Predicted Body {i+1}')
-    plt.xlabel('X Position (m)')
-    plt.ylabel('Y Position (m)')
-    plt.title('Actual vs. Predicted Positions of Bodies')
-    plt.legend()
-    plt.grid()
-    plt.show()
-
-# Calculate evaluation metrics (MAE, RMSE, and R²)
-mae = np.mean(np.abs(predicted_positions - actual_positions))
-rmse = np.sqrt(np.mean((predicted_positions - actual_positions) ** 2))
-ss_res = np.sum((predicted_positions - actual_positions) ** 2)
-ss_tot = np.sum((actual_positions - np.mean(actual_positions)) ** 2)
-r2_score = 1 - (ss_res / ss_tot)
-
-print(f"Mean Absolute Error (MAE): {mae:.4f}")
-print(f"Root Mean Squared Error (RMSE): {rmse:.4f}")
-print(f"R-Squared (R²): {r2_score:.4f}")
-
-# Generate future trajectories
-future_steps = 10
-future_positions = [test_positions]
-future_velocities = [test_velocities]
-
-for step in range(future_steps):
-    test_node_features = []
-    for i in range(n_bodies):
-        test_features = np.concatenate((future_positions[-1][i], future_velocities[-1][i], [masses[i]]))
-        test_node_features.append(test_features)
-    test_x = torch.tensor(np.array(test_node_features), dtype=torch.float32)
-    test_data = Data(x=test_x, edge_index=edge_index)
-    test_predicted = model(test_data).view(n_bodies, 6)
-    
-    next_positions = test_predicted[:, :3].detach().numpy()
-    next_velocities = test_predicted[:, 3:].detach().numpy()
-    
-    future_positions.append(next_positions)
-    future_velocities.append(next_velocities)
-
-# Plot future trajectories
-plt.figure()
-for i in range(n_bodies):
-    actual_traj = np.array([pos[i] for pos in future_positions])
-    plt.plot(actual_traj[:, 0], actual_traj[:, 1], label=f'Predicted Trajectory Body {i+1}')
-plt.xlabel('X Position (m)')
-plt.ylabel('Y Position (m)')
-plt.title('Predicted Future Trajectories of Bodies')
-plt.legend()
-plt.grid()
-plt.show()
-
-# Save the model for deployment
-torch.save(model.state_dict(), 'C:/Users/Manny Admin/Desktop/data/simulations/gnn_model_with_trajectories.pth')
