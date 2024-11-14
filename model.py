@@ -61,12 +61,17 @@ positions_path = os.path.join(data_dir, 'positions_over_time.npy')
 velocities_path = os.path.join(data_dir, 'velocities_over_time.npy')
 masses_path = os.path.join(data_dir, 'masses.npy')
 
-positions = np.load(positions_path)
-positions = (positions - positions.mean()) / positions.std()
-velocities = np.load(velocities_path)
-velocities = (velocities - velocities.mean()) / velocities.std()
-masses = np.load(masses_path)
-masses = (masses - masses.mean()) / masses.std()
+# Check if files exist and load data
+try:
+    positions = np.load(positions_path)
+    positions = (positions - positions.mean()) / positions.std()
+    velocities = np.load(velocities_path)
+    velocities = (velocities - velocities.mean()) / velocities.std()
+    masses = np.load(masses_path)
+    masses = (masses - masses.mean()) / masses.std()
+except FileNotFoundError as e:
+    print(f"Error: {e}. Please make sure the data files are present in the specified directory.")
+    exit(1)
 
 # Prepare the data for training
 node_features = []
