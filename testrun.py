@@ -1,3 +1,4 @@
+import os
 import logging
 import numpy as np
 import torch
@@ -9,6 +10,16 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 # Log start of script execution
 logging.info("Starting the N-Body Simulation script.")
 
+# Print current working directory and list all files
+cwd = os.getcwd()
+logging.info(f"Current working directory: {cwd}")
+logging.info("Listing all files in current directory and subdirectories:")
+
+for root, dirs, files in os.walk(cwd):
+    for name in files:
+        logging.info(os.path.join(root, name))
+
+# Now attempt to load the data files
 try:
     # Load preprocessed data
     logging.info("Attempting to load X_sequences.npy...")
