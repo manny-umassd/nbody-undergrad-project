@@ -3,3 +3,4 @@ matplotlib
 numpy
 torch
 torch-geometric
+requests
