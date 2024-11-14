@@ -212,4 +212,4 @@ plt.grid()
 plt.show()
 
 # Save the model for deployment
-torch.save(model.state_dict(), 'C:/Users/Manny Admin/Desktop/data/simulations/gnn_model_with_trajectories.pth')
+torch.save(model.state_dict(), 'gnn_model_with_trajectories.pth')
