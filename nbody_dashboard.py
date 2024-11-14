@@ -61,11 +61,11 @@ positions_path = os.path.join(data_dir, 'positions_over_time.npy')
 velocities_path = os.path.join(data_dir, 'velocities_over_time.npy')
 masses_path = os.path.join(data_dir, 'masses.npy')
 
-positions = np.load(positions_path, allow_pickle=True, encoding='latin1')  # Allowing pickled data if needed
+positions = np.load(positions_path, allow_pickle=True, encoding='bytes')  # Allowing pickled data if needed
 positions = (positions - positions.mean()) / positions.std()
-velocities = np.load(velocities_path, allow_pickle=True, encoding='latin1')
+velocities = np.load(velocities_path, allow_pickle=True, encoding='bytes')
 velocities = (velocities - velocities.mean()) / velocities.std()
-masses = np.load(masses_path, allow_pickle=True, encoding='latin1')
+masses = np.load(masses_path, allow_pickle=True, encoding='bytes')
 masses = (masses - masses.mean()) / masses.std()
 
 # Prepare the data for training
