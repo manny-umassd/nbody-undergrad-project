@@ -138,3 +138,79 @@ plt.show()
 
 # Save the model for deployment
 torch.save(model.state_dict(), os.path.join(data_dir, 'gnn_model_with_trajectories.pth'))
+
+# Evaluation: Predict future positions and velocities
+model.eval()
+with torch.no_grad():
+    test_positions = positions[-1]  # Use the last time step for testing
+    test_velocities = velocities[-1]
+    test_node_features = []
+    for i in range(n_bodies):
+        test_features = np.concatenate((test_positions[i], test_velocities[i], [masses[i]]))
+        test_node_features.append(test_features)
+    test_x = torch.tensor(np.array(test_node_features), dtype=torch.float32)
+    test_data = Data(x=test_x, edge_index=edge_index)
+    test_predicted = model(test_data).view(n_bodies, 6)
+
+    # Actual values
+    actual_positions = test_positions
+    actual_velocities = test_velocities
+
+    # Predicted values
+    predicted_positions = test_predicted[:, :3].detach().numpy()
+    predicted_velocities = test_predicted[:, 3:].detach().numpy()
+
+    # Plot actual vs. predicted positions for body 1
+    plt.figure()
+    for i in range(n_bodies):
+        plt.scatter(actual_positions[i][0], actual_positions[i][1], color='blue', label=f'Actual Body {i+1}')
+        plt.scatter(predicted_positions[i][0], predicted_positions[i][1], color='red', marker='x', label=f'Predicted Body {i+1}')
+    plt.xlabel('X Position (m)')
+    plt.ylabel('Y Position (m)')
+    plt.title('Actual vs. Predicted Positions of Bodies')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+# Calculate evaluation metrics (MAE, RMSE, and R²)
+mae = np.mean(np.abs(predicted_positions - actual_positions))
+rmse = np.sqrt(np.mean((predicted_positions - actual_positions) ** 2))
+ss_res = np.sum((predicted_positions - actual_positions) ** 2)
+ss_tot = np.sum((actual_positions - np.mean(actual_positions)) ** 2)
+r2_score = 1 - (ss_res / ss_tot)
+
+print(f"Mean Absolute Error (MAE): {mae:.4f}")
+print(f"Root Mean Squared Error (RMSE): {rmse:.4f}")
+print(f"R-Squared (R²): {r2_score:.4f}")
+
+# Generate future trajectories
+future_steps = 10
+future_positions = [test_positions]
+future_velocities = [test_velocities]
+
+for step in range(future_steps):
+    test_node_features = []
+    for i in range(n_bodies):
+        test_features = np.concatenate((future_positions[-1][i], future_velocities[-1][i], [masses[i]]))
+        test_node_features.append(test_features)
+    test_x = torch.tensor(np.array(test_node_features), dtype=torch.float32)
+    test_data = Data(x=test_x, edge_index=edge_index)
+    test_predicted = model(test_data).view(n_bodies, 6)
+    
+    next_positions = test_predicted[:, :3].detach().numpy()
+    next_velocities = test_predicted[:, 3:].detach().numpy()
+    
+    future_positions.append(next_positions)
+    future_velocities.append(next_velocities)
+
+# Plot future trajectories
+plt.figure()
+for i in range(n_bodies):
+    actual_traj = np.array([pos[i] for pos in future_positions])
+    plt.plot(actual_traj[:, 0], actual_traj[:, 1], label=f'Predicted Trajectory Body {i+1}')
+plt.xlabel('X Position (m)')
+plt.ylabel('Y Position (m)')
+plt.title('Predicted Future Trajectories of Bodies')
+plt.legend()
+plt.grid()
+plt.show()
